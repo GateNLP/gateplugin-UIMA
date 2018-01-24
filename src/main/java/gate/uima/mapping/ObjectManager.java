@@ -25,7 +25,7 @@ public class ObjectManager {
   private ObjectManager() {
   }
 
-  private static Map elementNameToClass = null;
+  private static Map<String, Class<? extends ObjectBuilder>> elementNameToClass = null;
 
   private static synchronized void init() throws MappingException {
     // return if already inited
@@ -33,7 +33,7 @@ public class ObjectManager {
       return;
     }
 
-    Map elementNameMap = new HashMap();
+    Map<String, Class<? extends ObjectBuilder>> elementNameMap = new HashMap<>();
 
     Properties builderClasses = new Properties();
     InputStream propsStream =
@@ -46,12 +46,13 @@ public class ObjectManager {
     }
 
     // file format is elementName=className
-    Iterator buildersIt = builderClasses.entrySet().iterator();
+    Iterator<Map.Entry<Object, Object>> buildersIt = builderClasses.entrySet().iterator();
     while(buildersIt.hasNext()) {
-      Map.Entry builder = (Map.Entry)buildersIt.next();
+      Map.Entry<Object, Object> builder = buildersIt.next();
       try {
-        Class builderClass = Class.forName((String)builder.getValue());
-        elementNameMap.put(builder.getKey(), builderClass);
+        Class<? extends ObjectBuilder> builderClass = Class.forName((String)builder.getValue())
+            .asSubclass(ObjectBuilder.class);
+        elementNameMap.put((String)builder.getKey(), builderClass);
       }
       catch(ClassNotFoundException cnfe) {
         throw new MappingException("Couldn't load builder class "
@@ -75,14 +76,14 @@ public class ObjectManager {
     }
 
     String elementName = elt.getName();
-    Class builderClass = (Class)elementNameToClass.get(elementName);
+    Class<? extends ObjectBuilder> builderClass = elementNameToClass.get(elementName);
     if(builderClass == null) {
       throw new MappingException("Unrecognised element name " + elementName);
     }
 
     ObjectBuilder builder = null;
     try {
-      builder = (ObjectBuilder)builderClass.newInstance();
+      builder = builderClass.newInstance();
     }
     catch(IllegalAccessException iae) {
       throw new MappingException("Couldn't access class "

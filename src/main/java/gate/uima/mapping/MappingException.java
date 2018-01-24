@@ -16,6 +16,7 @@ package gate.uima.mapping;
  * the mapping between GATE and UIMA annotation models, or while trying to
  * apply that mapping to a particular document.
  */
+@SuppressWarnings("serial")
 public class MappingException extends Exception {
   public MappingException() {
     super();

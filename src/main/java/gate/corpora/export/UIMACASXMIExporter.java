@@ -222,10 +222,11 @@ public class UIMACASXMIExporter extends DocumentExporter {
         new ArrayList<UIMAFeatureStructureBuilder>();
 
     if(inputsElement != null) {
-      List inputElements = inputsElement.getChildren();
-      Iterator inputMappingsIt = inputElements.iterator();
+      @SuppressWarnings("unchecked")
+      List<Element> inputElements = (List<Element>)inputsElement.getChildren();
+      Iterator<Element> inputMappingsIt = inputElements.iterator();
       while(inputMappingsIt.hasNext()) {
-        Element mapping = (Element)inputMappingsIt.next();
+        Element mapping = inputMappingsIt.next();
 
         try {
           ObjectBuilder inputBuilder =

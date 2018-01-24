@@ -13,7 +13,6 @@ package gate.uima.mapping;
 
 import org.apache.uima.cas.TypeSystem;
 import org.apache.uima.cas.Type;
-import org.apache.uima.cas.Feature;
 import org.apache.uima.cas.CAS;
 import gate.Document;
 import gate.Annotation;

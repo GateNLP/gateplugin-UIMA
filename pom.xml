@@ -16,6 +16,10 @@
 	<groupId>uk.ac.gate.plugins</groupId>
 	<artifactId>uima</artifactId>
 	<version>8.5-SNAPSHOT</version>
+	
+	<name>UIMA</name>
+	<description>UIMA integration layer for GATE</description>
+	
 
 	<licenses>
 		<license>

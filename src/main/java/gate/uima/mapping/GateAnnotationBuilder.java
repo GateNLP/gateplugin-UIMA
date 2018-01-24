@@ -54,7 +54,7 @@ public class GateAnnotationBuilder implements ObjectBuilder {
   /**
    * Feature definitions for the annotation.
    */
-  protected List featureDefs;
+  protected List<FeatureDefinition> featureDefs;
 
   /**
    * Should this builder index the generated annotations, so that changes to
@@ -126,24 +126,26 @@ public class GateAnnotationBuilder implements ObjectBuilder {
     indexed = Boolean.valueOf(indexedString).booleanValue();
 
     // build the list of feature definitions
-    List featureElements = elt.getChildren("feature");
-    featureDefs = new ArrayList(featureElements.size());
+    @SuppressWarnings("unchecked")
+    List<Element> featureElements = (List<Element>)elt.getChildren("feature");
+    featureDefs = new ArrayList<FeatureDefinition>(featureElements.size());
 
-    Iterator featureElementsIt = featureElements.iterator();
+    Iterator<Element> featureElementsIt = featureElements.iterator();
     while(featureElementsIt.hasNext()) {
-      Element featureElt = (Element)featureElementsIt.next();
+      Element featureElt = featureElementsIt.next();
       String featureName = featureElt.getAttributeValue("name");
       if(featureName == null) {
         throw new MappingException("feature element must have \"name\" "
             + "attribute specified");
       }
 
-      List children = featureElt.getChildren();
+      @SuppressWarnings("unchecked")
+      List<Element> children = (List<Element>)featureElt.getChildren();
       if(children.isEmpty()) {
         throw new MappingException("feature element must have a child element "
             + "specifying its value");
       }
-      Element valueElement = (Element)children.get(0);
+      Element valueElement = children.get(0);
 
       // create the object builder that gives this feature's value
       ObjectBuilder valueBuilder = ObjectManager.createBuilder(valueElement,
@@ -218,9 +220,9 @@ public class GateAnnotationBuilder implements ObjectBuilder {
   protected void applyFeatureDefs(FeatureMap features, CAS cas, Document doc,
       AnnotationSet annSet, Annotation currentGateAnn,
       FeatureStructure currentUimaAnn) throws MappingException {
-    Iterator featuresIt = featureDefs.iterator();
+    Iterator<FeatureDefinition> featuresIt = featureDefs.iterator();
     while(featuresIt.hasNext()) {
-      FeatureDefinition def = (FeatureDefinition)featuresIt.next();
+      FeatureDefinition def = featuresIt.next();
       
       // build the feature value
       ObjectBuilder valueBuilder = def.getValueBuilder();

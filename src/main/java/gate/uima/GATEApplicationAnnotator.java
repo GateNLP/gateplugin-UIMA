@@ -21,6 +21,7 @@ import gate.creole.*;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -36,9 +37,13 @@ import org.xml.sax.ErrorHandler;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 
-import org.apache.uima.analysis_engine.annotator.*;
-import org.apache.uima.analysis_engine.ResultSpecification;
+import org.apache.uima.UimaContext;
+import org.apache.uima.analysis_component.CasAnnotator_ImplBase;
+import org.apache.uima.analysis_engine.AnalysisEngineProcessException;
 import org.apache.uima.cas.TypeSystem;
+import org.apache.uima.cas.text.AnnotationFS;
+import org.apache.uima.resource.ResourceAccessException;
+import org.apache.uima.resource.ResourceInitializationException;
 import org.apache.uima.cas.Type;
 import org.apache.uima.cas.FeatureStructure;
 import org.apache.uima.cas.FSIterator;
@@ -48,13 +53,14 @@ import org.apache.uima.cas.CAS;
 /**
  * UIMA annotator that encapsulates a GATE processing pipeline.
  */
-public class GATEApplicationAnnotator extends Annotator_ImplBase
-                                      implements TextAnnotator {
+public class GATEApplicationAnnotator extends CasAnnotator_ImplBase
+                                       {
   private static final boolean DEBUG = false;
 
   /**
    * Version ID for CVS.
    */
+  @SuppressWarnings("unused")
   private static final String __CVSID = "$Id";
 
   /**
@@ -72,7 +78,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
   public static final String USER_CONFIG_PROPERTY = "uima.gate.userconfig";
 
   private static synchronized void initGate()
-                  throws AnnotatorInitializationException {
+                  throws ResourceInitializationException {
     if(!Gate.isInitialised()) {
       try {
         File gateConfigDir = null;
@@ -107,7 +113,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
             }
           }
           catch(Throwable t) {
-            throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+            throw new ResourceInitializationException(MESSAGE_DIGEST,
                 "gate_init_exception", new Object[0], t);
           }
         }
@@ -116,7 +122,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
         }
 
         if(!gateConfigDir.exists() || !gateConfigDir.isDirectory()) {
-          throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+          throw new ResourceInitializationException(MESSAGE_DIGEST,
               "config_dir_not_found", new Object[0]);
         }
         
@@ -145,7 +151,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
         Gate.init();
       }
       catch(GateException gx) {
-        throw new AnnotatorInitializationException(
+        throw new ResourceInitializationException(
             MESSAGE_DIGEST, "gate_init_exception", new Object[0], gx);
       }
     }
@@ -159,7 +165,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
   private CorpusController gateApplication;
   private Corpus gateCorpus;
 
-  private Map uimaGateIndex;
+  private Map<String, Map<Integer, TypeAndFS>> uimaGateIndex;
   
   /**
    * A Map taking annotation set names to Lists of ObjectBuilders defining the
@@ -167,35 +173,34 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
    * contain <code>null</code> as a key, denoting the mappings to the default
    * (unnamed) annotation set.
    */
-  private Map inputMappings;
+  private Map<String, List<GateAnnotationBuilder>> inputMappings;
 
   /**
    * A list of ObjectBuilders defining the new annotations created by GATE that
    * should be mapped back into UIMA.
    */
-  private List outputsAdded;
+  private List<UIMAFeatureStructureBuilder> outputsAdded;
 
   /**
    * A list of ObjectBuilders defining the annotations whose features have been
    * updated by GATE, and for which changes should be propagated back into
    * UIMA.
    */
-  private List outputsUpdated;
+  private List<UIMAFeatureStructureBuilder> outputsUpdated;
 
   /**
    * A list of ObjectBuilders giving the annotations that have been removed by
    * GATE and for which the corresponding annotations should be removed in
    * UIMA.
    */
-  private List outputsRemoved;
+  private List<UIMAFeatureStructureBuilder> outputsRemoved;
 
   /**
    * Initialise this annotator, by extracting parameter values from the
    * context, and initialising GATE, if necessary.
    */
-  public void initialize(AnnotatorContext aContext)
-                 throws AnnotatorConfigurationException,
-                        AnnotatorInitializationException {
+  public void initialize(UimaContext aContext)
+                 throws ResourceInitializationException {
     super.initialize(aContext);
     // make sure GATE is initialized
     initGate();
@@ -205,37 +210,29 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
       mappingDescriptorURL =
         getContext().getResourceURL(MAPPING_DESCRIPTOR_RESOURCE_NAME);
     }
-    catch(AnnotatorContextException ace) {
-      throw new AnnotatorInitializationException(ace);
+    catch(ResourceAccessException ace) {
+      throw new ResourceInitializationException(ace);
     }
 
     try {
       gateApplication = (CorpusController)
         PersistenceManager.loadObjectFromUrl(gateAppURL);
     }
-    catch(PersistenceException px) {
-      throw new AnnotatorInitializationException(MESSAGE_DIGEST,
-          "error_loading_gate_app", new Object[] {gateAppURL}, px);
-    }
-    catch(ResourceInstantiationException rix) {
-      throw new AnnotatorInitializationException(MESSAGE_DIGEST,
-          "error_loading_gate_app", new Object[] {gateAppURL}, rix);
-    }
-    catch(IOException iox) {
-      throw new AnnotatorInitializationException(MESSAGE_DIGEST,
-          "error_loading_gate_app", new Object[] {gateAppURL}, iox);
+    catch(PersistenceException | ResourceInstantiationException | IOException ex) {
+      throw new ResourceInitializationException(MESSAGE_DIGEST,
+          "error_loading_gate_app", new Object[] {gateAppURL}, ex);
     }
 
     try {
       gateCorpus = Factory.newCorpus("UIMA corpus");
     }
     catch(ResourceInstantiationException rix) {
-      throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+      throw new ResourceInitializationException(MESSAGE_DIGEST,
           "error_creating_corpus", new Object[0], rix);
     }
 
     gateApplication.setCorpus(gateCorpus);
-    uimaGateIndex = new HashMap();
+    uimaGateIndex = new HashMap<String, Map<Integer, TypeAndFS>>();
   }
 
   /**
@@ -259,8 +256,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
    * type system.
    */
   public void typeSystemInit(TypeSystem typeSystem)
-                 throws AnnotatorConfigurationException,
-                        AnnotatorInitializationException {
+                 throws AnalysisEngineProcessException {
     super.typeSystemInit(typeSystem);
 
     // parse the mapping file somehow
@@ -286,11 +282,11 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
       configDoc = builder.build(mappingDescriptorURL);
     }
     catch(JDOMException jde) {
-      throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+      throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
           "mapping_descriptor_parse_error", new Object[0], jde);
     }
     catch(IOException ioe) {
-      throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+      throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
           "mapping_descriptor_io_error", new Object[0], ioe);
     }
 
@@ -305,69 +301,71 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
    */
   private void processMappingDescriptor(org.jdom.Document doc,
                                         TypeSystem typeSystem)
-               throws AnnotatorInitializationException {
+               throws AnalysisEngineProcessException {
     Element topElement = doc.getRootElement();
     // process input section
     Element inputsElement = topElement.getChild("inputs");
-    inputMappings = new HashMap();
+    inputMappings = new HashMap<String, List<GateAnnotationBuilder>>();
 
     if(inputsElement != null) {
-      List inputElements = inputsElement.getChildren();
-      Iterator inputMappingsIt = inputElements.iterator();
+      @SuppressWarnings("unchecked")
+      List<Element> inputElements = (List<Element>)inputsElement.getChildren();
+      Iterator<Element> inputMappingsIt = inputElements.iterator();
       while(inputMappingsIt.hasNext()) {
-        Element mapping = (Element)inputMappingsIt.next();
+        Element mapping = inputMappingsIt.next();
 
         try {
           ObjectBuilder inputBuilder =
             ObjectManager.createBuilder(mapping, typeSystem);
 
           if(!(inputBuilder instanceof GateAnnotationBuilder)) {
-            throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+            throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
                 "input_must_be_gab", new Object[0]);
           }
           
           String annotationSetName =
             mapping.getAttributeValue("annotationSetName");
           // annotation set name may be null, this is not a problem
-          addInputMapping(annotationSetName, inputBuilder);
+          addInputMapping(annotationSetName, (GateAnnotationBuilder)inputBuilder);
         }
         catch(MappingException mx) {
-          throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+          throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
               "error_creating_mapping", new String[] {"input"}, mx);
         }
       }
     }
 
     // process outputs
-    outputsAdded = new ArrayList();
-    outputsUpdated = new ArrayList();
-    outputsRemoved = new ArrayList();
+    outputsAdded = new ArrayList<UIMAFeatureStructureBuilder>();
+    outputsUpdated = new ArrayList<UIMAFeatureStructureBuilder>();
+    outputsRemoved = new ArrayList<UIMAFeatureStructureBuilder>();
 
     Element outputsElement = topElement.getChild("outputs");
     if(outputsElement != null) {
       String[] elements = new String[] {"added", "updated", "removed"};
-      List[] lists = new List[] {outputsAdded, outputsUpdated, outputsRemoved};
+      List<List<UIMAFeatureStructureBuilder>> lists = Arrays.asList(outputsAdded, outputsUpdated, outputsRemoved);
       for(int i = 0; i < elements.length; i++) {
         Element elt = outputsElement.getChild(elements[i]);
         if(elt != null) {
-          List outputElements = elt.getChildren();
-          Iterator outputMappingsIt = outputElements.iterator();
+          @SuppressWarnings("unchecked")
+          List<Element> outputElements = (List<Element>)elt.getChildren();
+          Iterator<Element> outputMappingsIt = outputElements.iterator();
           while(outputMappingsIt.hasNext()) {
-            Element mapping = (Element)outputMappingsIt.next();
+            Element mapping = outputMappingsIt.next();
             
             try {
               ObjectBuilder outputBuilder =
                 ObjectManager.createBuilder(mapping, typeSystem);
 
               if(!(outputBuilder instanceof UIMAFeatureStructureBuilder)) {
-                throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+                throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
                     "output_must_be_fsbuilder", new Object[0]);
               }
               
-              lists[i].add(outputBuilder);
+              lists.get(i).add((UIMAFeatureStructureBuilder)outputBuilder);
             }
             catch(MappingException mx) {
-              throw new AnnotatorInitializationException(MESSAGE_DIGEST,
+              throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
                     "error_creating_mapping", new String[] {"output"}, mx);
             }
           }
@@ -380,18 +378,18 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
    * Add an input mapping (ObjectBuilder) to the mapping list for the given
    * annotation set name.
    */
-  private void addInputMapping(String annSetName, ObjectBuilder builder) {
-    List inputsForSet = (List)inputMappings.get(annSetName);
+  private void addInputMapping(String annSetName, GateAnnotationBuilder builder) {
+    List<GateAnnotationBuilder> inputsForSet = inputMappings.get(annSetName);
     if(inputsForSet == null) {
-      inputsForSet = new ArrayList();
+      inputsForSet = new ArrayList<GateAnnotationBuilder>();
       inputMappings.put(annSetName, inputsForSet);
     }
     inputsForSet.add(builder);
   }
 
  
-  public void process(CAS cas, ResultSpecification resultSpec)
-                  throws AnnotatorProcessException {
+  public void process(CAS cas)
+                  throws AnalysisEngineProcessException {
     String docText = cas.getDocumentText();
     gate.Document gateDoc = null;
     try {
@@ -404,7 +402,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
           docParams);
     }
     catch(ResourceInstantiationException rix) {
-      throw new AnnotatorProcessException(MESSAGE_DIGEST,
+      throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
           "error_creating_gate_doc", new Object[0], rix);
     }
 
@@ -418,11 +416,11 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
       mapOutputs(cas, gateDoc);
     }
     catch(ExecutionException ex) {
-      throw new AnnotatorProcessException(MESSAGE_DIGEST,
+      throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
           "error_executing_app", new Object[0], ex);
     }
     catch(MappingException mx) {
-      throw new AnnotatorProcessException(MESSAGE_DIGEST,
+      throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
           "error_mapping_annots", new Object[0], mx);
     }
     finally {
@@ -434,16 +432,16 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
   }
 
   private void mapInputAnnotations(CAS cas, gate.Document gateDoc)
-                          throws MappingException, AnnotatorProcessException {
+                          throws MappingException, AnalysisEngineProcessException {
     // nothing to do if there are no input mappings
     if(inputMappings == null || inputMappings.isEmpty()) {
       return;
     }
 
     // input mappings is a map from annotation set name to list of mappings
-    Iterator mappingSetsIt = inputMappings.entrySet().iterator();
+    Iterator<Map.Entry<String, List<GateAnnotationBuilder>>> mappingSetsIt = inputMappings.entrySet().iterator();
     while(mappingSetsIt.hasNext()) {
-      Map.Entry mappingSet = (Map.Entry)mappingSetsIt.next();
+      Map.Entry<String, List<GateAnnotationBuilder>> mappingSet = mappingSetsIt.next();
 
       // get the right annotation set for this set of mappings
       AnnotationSet annSet = null;
@@ -451,25 +449,25 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
         annSet = gateDoc.getAnnotations();
       }
       else {
-        annSet = gateDoc.getAnnotations((String)mappingSet.getKey());
+        annSet = gateDoc.getAnnotations(mappingSet.getKey());
       }
 
-      List mappings = (List)mappingSet.getValue();
-      Iterator mappingsIt = mappings.iterator();
+      List<GateAnnotationBuilder> mappings = mappingSet.getValue();
+      Iterator<GateAnnotationBuilder> mappingsIt = mappings.iterator();
       while(mappingsIt.hasNext()) {
-        GateAnnotationBuilder gab = (GateAnnotationBuilder)mappingsIt.next();
+        GateAnnotationBuilder gab = mappingsIt.next();
 
         Type uimaType = gab.getUimaType();
         String gateType = gab.getGateType();
-        FSIterator annotsToMap = cas.getAnnotationIndex(uimaType).iterator();
+        FSIterator<AnnotationFS> annotsToMap = cas.getAnnotationIndex(uimaType).iterator();
         while(annotsToMap.hasNext()) {
-          FeatureStructure uimaAnnot = (FeatureStructure)annotsToMap.next();
+          FeatureStructure uimaAnnot = annotsToMap.next();
 
           // create the annotation in the given annotation set
           Integer id = (Integer)
             gab.buildObject(cas, gateDoc, annSet, null, uimaAnnot);
           // add to index
-          addToUimaGateIndex(uimaAnnot, (String)mappingSet.getKey(),
+          addToUimaGateIndex(uimaAnnot, mappingSet.getKey(),
                              gateType, id);
         }
       }
@@ -477,14 +475,14 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
   }
 
   private void mapOutputs(CAS cas, gate.Document gateDoc)
-                          throws MappingException, AnnotatorProcessException {
+                          throws MappingException, AnalysisEngineProcessException {
     FSIndexRepository uimaIndexes = cas.getIndexRepository();
     // added
     if(!outputsAdded.isEmpty()) {
-      Iterator outputsAddedIt = outputsAdded.iterator();
+      Iterator<UIMAFeatureStructureBuilder> outputsAddedIt = outputsAdded.iterator();
       while(outputsAddedIt.hasNext()) {
         UIMAFeatureStructureBuilder fsBuilder =
-          (UIMAFeatureStructureBuilder)outputsAddedIt.next();
+          outputsAddedIt.next();
 
         if(fsBuilder instanceof UIMAAnnotationBuilder) {
           // iterate over all the GATE annotations of the appropriate type in
@@ -503,9 +501,9 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
 
           AnnotationSet annotsOfType = annSet.get(gateAnnotType);
           if(annotsOfType != null) {
-            Iterator annotsIt = annotsOfType.iterator();
+            Iterator<Annotation> annotsIt = annotsOfType.iterator();
             while(annotsIt.hasNext()) {
-              gate.Annotation ann = (gate.Annotation)annotsIt.next();
+              gate.Annotation ann =annotsIt.next();
               FeatureStructure uimaAnn = (FeatureStructure)
                 annotBuilder.buildObject(cas, gateDoc, annSet, ann, null);
               uimaIndexes.addFS(uimaAnn);
@@ -523,10 +521,10 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
     
     // updated
     if(!outputsUpdated.isEmpty()) {
-      Iterator outputsUpdatedIt = outputsUpdated.iterator();
+      Iterator<UIMAFeatureStructureBuilder> outputsUpdatedIt = outputsUpdated.iterator();
       while(outputsUpdatedIt.hasNext()) {
         UIMAFeatureStructureBuilder fsBuilder =
-          (UIMAFeatureStructureBuilder)outputsUpdatedIt.next();
+          outputsUpdatedIt.next();
 
         if(fsBuilder instanceof UIMAAnnotationBuilder) {
           // iterate over all the annotations of the right type in the right
@@ -546,10 +544,10 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
 
           AnnotationSet annotsOfType = annSet.get(gateAnnotType);
           if(annotsOfType != null) {
-            Iterator annotsIt = annotsOfType.iterator();
+            Iterator<Annotation> annotsIt = annotsOfType.iterator();
             while(annotsIt.hasNext()) {
-              gate.Annotation ann = (gate.Annotation)annotsIt.next();
-              FeatureStructure uimaAnn = (FeatureStructure)
+              gate.Annotation ann = annotsIt.next();
+              FeatureStructure uimaAnn =
                 getFSForGATEAnnot(annotationSetName, ann.getId());
               if(uimaAnn != null) {
                 // remove from indexes during update, in case we change the
@@ -569,7 +567,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
           }
         }
         else {
-          throw new AnnotatorProcessException(MESSAGE_DIGEST,
+          throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
               "only_annotations_updated", new Object[0]);
         }
       }
@@ -577,10 +575,10 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
 
     // removed
     if(!outputsRemoved.isEmpty()) {
-      Iterator outputsRemovedIt = outputsRemoved.iterator();
+      Iterator<UIMAFeatureStructureBuilder> outputsRemovedIt = outputsRemoved.iterator();
       while(outputsRemovedIt.hasNext()) {
         UIMAFeatureStructureBuilder fsBuilder =
-          (UIMAFeatureStructureBuilder)outputsRemovedIt.next();
+          outputsRemovedIt.next();
 
         if(fsBuilder instanceof UIMAAnnotationBuilder) {
           // iterate over all the annotations of the appropriate type in the
@@ -600,13 +598,13 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
             annSet = gateDoc.getAnnotations(annotationSetName);
           }
 
-          Map indexForAnnSet = getIndexForAnnotationSet(annotationSetName);
+          Map<Integer, TypeAndFS> indexForAnnSet = getIndexForAnnotationSet(annotationSetName);
           if(indexForAnnSet != null) {
-            Iterator indexIt = indexForAnnSet.entrySet().iterator();
+            Iterator<Map.Entry<Integer, TypeAndFS>> indexIt = indexForAnnSet.entrySet().iterator();
             while(indexIt.hasNext()) {
-              Map.Entry indexEntry = (Map.Entry)indexIt.next();
-              Integer id = (Integer)indexEntry.getKey();
-              TypeAndFS tfs = (TypeAndFS)indexEntry.getValue();
+              Map.Entry<Integer, TypeAndFS> indexEntry = indexIt.next();
+              Integer id = indexEntry.getKey();
+              TypeAndFS tfs = indexEntry.getValue();
               if(gateAnnotType.equals(tfs.type)) {
                 Annotation ann = annSet.get(id);
                 if(ann == null) {
@@ -618,7 +616,7 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
           }
         }
         else {
-          throw new AnnotatorProcessException(MESSAGE_DIGEST,
+          throw new AnalysisEngineProcessException(MESSAGE_DIGEST,
               "only_annotations_removed", new Object[0]);
         }
       }
@@ -630,9 +628,9 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
   private void addToUimaGateIndex(FeatureStructure uimaAnnot,
                                   String annotationSetName, String annType,
                                   Integer gateID) {
-    Map mapForAS = (Map)uimaGateIndex.get(annotationSetName);
+    Map<Integer, TypeAndFS> mapForAS = uimaGateIndex.get(annotationSetName);
     if(mapForAS == null) {
-      mapForAS = new HashMap();
+      mapForAS = new HashMap<Integer, TypeAndFS>();
       uimaGateIndex.put(annotationSetName, mapForAS);
     }
     mapForAS.put(gateID, new TypeAndFS(annType, uimaAnnot));
@@ -643,23 +641,25 @@ public class GATEApplicationAnnotator extends Annotator_ImplBase
     return (tfs == null) ? null : tfs.fs;
   }
 
+  /*
   private String getTypeForGATEAnnot(String asName, Integer id) {
     TypeAndFS tfs = getTypeAndFSForGATEAnnot(asName, id);
     return (tfs == null) ? null : tfs.type;
   }
+  */
 
   private TypeAndFS getTypeAndFSForGATEAnnot(String asName, Integer id) {
-    Map mapForAS = (Map)uimaGateIndex.get(asName);
+    Map<Integer, TypeAndFS> mapForAS = uimaGateIndex.get(asName);
     if(mapForAS == null) {
       return null;
     }
     else {
-      return (TypeAndFS)mapForAS.get(id);
+      return mapForAS.get(id);
     }
   }
 
-  private Map getIndexForAnnotationSet(String asName) {
-    return (Map)uimaGateIndex.get(asName);
+  private Map<Integer, TypeAndFS> getIndexForAnnotationSet(String asName) {
+    return uimaGateIndex.get(asName);
   }
 
   /**

@@ -19,7 +19,6 @@ import gate.Document;
 import gate.Annotation;
 import gate.AnnotationSet;
 import org.apache.uima.cas.FeatureStructure;
-import org.apache.uima.cas.CASRuntimeException;
 import org.jdom.Element;
 import java.util.List;
 import java.util.ArrayList;
@@ -37,7 +36,7 @@ public class UIMAFeatureStructureBuilder implements ObjectBuilder {
   /**
    * Feature definitions for this feature structure.
    */
-  protected List featureDefs;
+  protected List<FeatureDefinition> featureDefs;
   
   /**
    * Configure this ObjectBuilder by extracting the FeatureStructure type and
@@ -58,12 +57,13 @@ public class UIMAFeatureStructureBuilder implements ObjectBuilder {
     }
 
     // build the list of feature definitions for this FS
-    List featureElements = elt.getChildren("feature");
-    featureDefs = new ArrayList(featureElements.size());
+    @SuppressWarnings("unchecked")
+    List<Element> featureElements = (List<Element>)elt.getChildren("feature");
+    featureDefs = new ArrayList<FeatureDefinition>(featureElements.size());
 
-    Iterator featureElementsIt = featureElements.iterator();
+    Iterator<Element> featureElementsIt = featureElements.iterator();
     while(featureElementsIt.hasNext()) {
-      Element featureElt = (Element)featureElementsIt.next();
+      Element featureElt = featureElementsIt.next();
       String featureName = featureElt.getAttributeValue("name");
       if(featureName == null) {
         throw new MappingException("feature element must have \"name\" "
@@ -82,12 +82,13 @@ public class UIMAFeatureStructureBuilder implements ObjectBuilder {
             + "attribute specified");
       }
 
-      List children = featureElt.getChildren();
+      @SuppressWarnings("unchecked")
+      List<Element> children = (List<Element>)featureElt.getChildren();
       if(children.isEmpty()) {
         throw new MappingException("feature element must have a child element "
             + "specifying its value");
       }
-      Element valueElement = (Element)children.get(0);
+      Element valueElement = children.get(0);
 
       // create the object builder that gives this feature's value
       ObjectBuilder valueBuilder = ObjectManager.createBuilder(valueElement,
@@ -128,9 +129,9 @@ public class UIMAFeatureStructureBuilder implements ObjectBuilder {
   public void populateFeatures(FeatureStructure newFS, CAS cas,
             Document doc, AnnotationSet annSet, Annotation currentAnn,
             FeatureStructure currentFS) throws MappingException {
-    Iterator featuresIt = featureDefs.iterator();
+    Iterator<FeatureDefinition> featuresIt = featureDefs.iterator();
     while(featuresIt.hasNext()) {
-      FeatureDefinition def = (FeatureDefinition)featuresIt.next();
+      FeatureDefinition def = featuresIt.next();
       
       // build the feature value
       ObjectBuilder valueBuilder = def.getValueBuilder();

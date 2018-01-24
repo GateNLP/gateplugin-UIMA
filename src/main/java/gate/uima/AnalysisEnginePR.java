@@ -80,6 +80,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
   private static final long serialVersionUID = 6887409146460709861L;
 
   /** Version string for CVS. */
+  @SuppressWarnings("unused")
   private static final String __CVSID = "$Id: AnalysisEnginePR.java 12299 2010-02-22 19:56:28Z ian_roberts $";
 
   private static final boolean DEBUG = false;
@@ -167,27 +168,27 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
    * A List of ObjectBuilders defining the input mappings of GATE annotations
    * to UIMA annotations.
    */
-  private List inputMappings;
+  private List<UIMAFeatureStructureBuilder> inputMappings;
 
   /**
    * A list of ObjectBuilders defining the new annotations created by UIMA that
    * should be mapped back into GATE.
    */
-  private List outputsAdded;
+  private List<GateAnnotationBuilder> outputsAdded;
 
   /**
    * A list of ObjectBuilders defining the annotations whose features have been
    * updated by UIMA, and for which changes should be propagated back into
    * GATE.
    */
-  private List outputsUpdated;
+  private List<GateAnnotationBuilder> outputsUpdated;
 
   /**
    * A list of ObjectBuilders giving the annotations that have been removed by
    * UIMA and for which the corresponding annotations should be removed in
    * GATE.
    */
-  private List outputsRemoved;
+  private List<GateAnnotationBuilder> outputsRemoved;
 
 
   ////// variables for the GATE/UIMA index //////
@@ -216,7 +217,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
   private static final String ANNOTATIONSOURCE_GATEANNOTATIONTYPE_FEATURE_NAME =
     ANNOTATIONSOURCE_TYPE_NAME + ":GATEAnnotationType";
 
-  private FSIndex gateFSIndex;
+  private FSIndex<FeatureStructure> gateFSIndex;
 
   private static final String GATE_INDEX_LABEL = "GATEIndex";
 
@@ -272,7 +273,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
       // create a CAS to use for the analysis engine and the GATE/UIMA index.
       // CAS instances are expensive to create, so we reuse the same tcas for
       // all documents.
-      List casSpecs = Arrays.asList(new Object[] {
+      List<ResourceMetaData> casSpecs = Arrays.asList(new ResourceMetaData[] {
            analysisEngine.getAnalysisEngineMetaData(),
            gateIndexDescription});
 
@@ -358,6 +359,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
       }
       
       // run the AE
+      @SuppressWarnings("unused")
       ProcessTrace trace = analysisEngine.process(cas);
 
       if(DEBUG) {
@@ -449,10 +451,10 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
       sourceSet = document.getAnnotations(annotationSetName);
     }
 
-    Iterator inputsIt = inputMappings.iterator();
+    Iterator<UIMAFeatureStructureBuilder> inputsIt = inputMappings.iterator();
     while(inputsIt.hasNext()) {
       UIMAFeatureStructureBuilder fsBuilder =
-        (UIMAFeatureStructureBuilder)inputsIt.next();
+        inputsIt.next();
 
       if(fsBuilder instanceof UIMAAnnotationBuilder) {
         UIMAAnnotationBuilder annotBuilder = (UIMAAnnotationBuilder)fsBuilder;
@@ -464,9 +466,9 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
           sourceSet.get(annotBuilder.getGateAnnotationType());
 
         if(annotsToMap != null) {
-          Iterator annotsToMapIt = annotsToMap.iterator();
+          Iterator<Annotation> annotsToMapIt = annotsToMap.iterator();
           while(annotsToMapIt.hasNext()) {
-            gate.Annotation gateAnnot = (gate.Annotation)annotsToMapIt.next();
+            gate.Annotation gateAnnot = annotsToMapIt.next();
             try {
               AnnotationFS uimaAnnot =
                 (AnnotationFS)annotBuilder.buildObject(cas, document,
@@ -528,18 +530,18 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
 
     // added annotations
     if(!outputsAdded.isEmpty()) {
-      Iterator outputsAddedIt = outputsAdded.iterator();
+      Iterator<GateAnnotationBuilder> outputsAddedIt = outputsAdded.iterator();
       while(outputsAddedIt.hasNext()) {
         GateAnnotationBuilder outputBuilder =
-          (GateAnnotationBuilder)outputsAddedIt.next();
+          outputsAddedIt.next();
 
         // iterate over all the UIMA annotations of the appropriate type and
         // create GATE annotations to correspond
         Type uimaAnnotationType = outputBuilder.getUimaType();
-        FSIndex uimaIndex = cas.getAnnotationIndex(uimaAnnotationType);
-        Iterator uimaIndexIt = uimaIndex.iterator();
+        FSIndex<AnnotationFS> uimaIndex = cas.getAnnotationIndex(uimaAnnotationType);
+        Iterator<AnnotationFS> uimaIndexIt = uimaIndex.iterator();
         while(uimaIndexIt.hasNext()) {
-          FeatureStructure uimaAnn = (FeatureStructure)uimaIndexIt.next();
+          FeatureStructure uimaAnn = uimaIndexIt.next();
           try {
             outputBuilder.buildObject(cas, document, annSet, null, uimaAnn);
           }
@@ -554,19 +556,19 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
 
     // updated annotations
     if(!outputsUpdated.isEmpty()) {
-      Iterator outputsUpdatedIt = outputsUpdated.iterator();
+      Iterator<GateAnnotationBuilder> outputsUpdatedIt = outputsUpdated.iterator();
       while(outputsUpdatedIt.hasNext()) {
         GateAnnotationBuilder outputBuilder =
-          (GateAnnotationBuilder)outputsUpdatedIt.next();
+          outputsUpdatedIt.next();
 
         String gateAnnotType = outputBuilder.getGateType();
 
         // iterate over all the GATE annotations of the appropriate type, find
         // their corresponding UIMA annotations and update the GATE
         // annotation's features
-        FSIterator indexIt = getIndexIterator(gateAnnotType);
+        FSIterator<FeatureStructure> indexIt = getIndexIterator(gateAnnotType);
         while(indexIt.hasNext()) {
-          FeatureStructure indexEntry = (FeatureStructure)indexIt.next();
+          FeatureStructure indexEntry = indexIt.next();
           if(DEBUG) {
             System.err.println("Updating outputs - index entry: " + indexEntry);
           }
@@ -587,20 +589,20 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
 
     // removed annotations
     if(!outputsRemoved.isEmpty()) {
-      FSIndex allAnnotationsIndex = cas.getAnnotationIndex();
-      Iterator outputsRemovedIt = outputsRemoved.iterator();
+      FSIndex<AnnotationFS> allAnnotationsIndex = cas.getAnnotationIndex();
+      Iterator<GateAnnotationBuilder> outputsRemovedIt = outputsRemoved.iterator();
       while(outputsRemovedIt.hasNext()) {
         GateAnnotationBuilder outputBuilder =
-          (GateAnnotationBuilder)outputsRemovedIt.next();
+          outputsRemovedIt.next();
 
         String gateAnnotType = outputBuilder.getGateType();
 
         // iterate over all the GATE annotations of the appropriate type, find
         // their corresponding UIMA annotations and update the GATE
         // annotation's features
-        FSIterator indexIt = getIndexIterator(gateAnnotType);
+        FSIterator<FeatureStructure> indexIt = getIndexIterator(gateAnnotType);
         INDEX_ENTRY: while(indexIt.hasNext()) {
-          FeatureStructure indexEntry = (FeatureStructure)indexIt.next();
+          FeatureStructure indexEntry = indexIt.next();
           if(DEBUG) {
             System.err.println("\"removed\" output - index entry: " + indexEntry);
           }
@@ -615,7 +617,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
           // that is >= uimaAnnot under the AnnotationIndex ordering, i.e. the
           // first annotation that starts at the same place or to the right of
           // uimaAnnot
-          FSIterator annotIndexIt = allAnnotationsIndex.iterator(uimaAnnot);
+          FSIterator<AnnotationFS> annotIndexIt = allAnnotationsIndex.iterator(uimaAnnot);
 
           // now iterate starting from this location until either (a) we run
           // out of annotations in the AnnotationIndex, or (b) we come to an
@@ -727,7 +729,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
    * Returns an FSIterator over the GATE/UIMA index for the index entries that
    * refer to the specified type of GATE annotation.
    */
-  private FSIterator getIndexIterator(String gateAnnotType) {
+  private FSIterator<FeatureStructure> getIndexIterator(String gateAnnotType) {
     ConstraintFactory cf = cas.getConstraintFactory();
     // construct a matching constraint to allow us to iterate over only
     // those index entries that refer to the right kind of GATE annotation
@@ -737,8 +739,8 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
     FSMatchConstraint matchConstraint =
       cf.embedConstraint(gateAnnotationTypePath, annotTypeConstraint);
 
-    FSIterator allIndexEntriesIt = gateFSIndex.iterator();
-    FSIterator indexIt = cas.createFilteredIterator(
+    FSIterator<FeatureStructure> allIndexEntriesIt = gateFSIndex.iterator();
+    FSIterator<FeatureStructure> indexIt = cas.createFilteredIterator(
         allIndexEntriesIt, matchConstraint);
 
     return indexIt;
@@ -771,13 +773,14 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
     Element topElement = doc.getRootElement();
     // process input section
     Element inputsElement = topElement.getChild("inputs");
-    inputMappings = new ArrayList();
+    inputMappings = new ArrayList<UIMAFeatureStructureBuilder>();
 
     if(inputsElement != null) {
-      List inputElements = inputsElement.getChildren();
-      Iterator inputMappingsIt = inputElements.iterator();
+      @SuppressWarnings("unchecked")
+      List<Element> inputElements = (List<Element>)inputsElement.getChildren();
+      Iterator<Element> inputMappingsIt = inputElements.iterator();
       while(inputMappingsIt.hasNext()) {
-        Element mapping = (Element)inputMappingsIt.next();
+        Element mapping = inputMappingsIt.next();
 
         try {
           ObjectBuilder inputBuilder =
@@ -788,7 +791,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
                 "input mapping must be a feature structure builder");
           }
           
-          inputMappings.add(inputBuilder);
+          inputMappings.add((UIMAFeatureStructureBuilder)inputBuilder);
         }
         catch(MappingException mx) {
           throw (ResourceInstantiationException)
@@ -799,21 +802,22 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
     }
 
     // process outputs
-    outputsAdded = new ArrayList();
-    outputsUpdated = new ArrayList();
-    outputsRemoved = new ArrayList();
+    outputsAdded = new ArrayList<GateAnnotationBuilder>();
+    outputsUpdated = new ArrayList<GateAnnotationBuilder>();
+    outputsRemoved = new ArrayList<GateAnnotationBuilder>();
 
     Element outputsElement = topElement.getChild("outputs");
     if(outputsElement != null) {
       String[] elements = new String[] {"added", "updated", "removed"};
-      List[] lists = new List[] {outputsAdded, outputsUpdated, outputsRemoved};
+      List<List<GateAnnotationBuilder>> lists = Arrays.asList(outputsAdded, outputsUpdated, outputsRemoved);
       for(int i = 0; i < elements.length; i++) {
         Element elt = outputsElement.getChild(elements[i]);
         if(elt != null) {
-          List outputElements = elt.getChildren();
-          Iterator outputMappingsIt = outputElements.iterator();
+          @SuppressWarnings("unchecked")
+          List<Element> outputElements = (List<Element>)elt.getChildren();
+          Iterator<Element> outputMappingsIt = outputElements.iterator();
           while(outputMappingsIt.hasNext()) {
-            Element mapping = (Element)outputMappingsIt.next();
+            Element mapping = outputMappingsIt.next();
             
             try {
               ObjectBuilder outputBuilder =
@@ -824,7 +828,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
                     "output mapping must be a GATE annotation builder");
               }
               
-              lists[i].add(outputBuilder);
+              lists.get(i).add((GateAnnotationBuilder)outputBuilder);
             }
             catch(MappingException mx) {
               throw (ResourceInstantiationException)
