@@ -157,38 +157,38 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
   /**
    * The UIMA analysis engine that actually does the work.
    */
-  private AnalysisEngine analysisEngine;
+  private transient AnalysisEngine analysisEngine;
 
   /**
    * The CAS used to pass annotations into and out of the TAE.
    */
-  private CAS cas;
+  private transient CAS cas;
 
   /**
    * A List of ObjectBuilders defining the input mappings of GATE annotations
    * to UIMA annotations.
    */
-  private List<UIMAFeatureStructureBuilder> inputMappings;
+  private transient List<UIMAFeatureStructureBuilder> inputMappings;
 
   /**
    * A list of ObjectBuilders defining the new annotations created by UIMA that
    * should be mapped back into GATE.
    */
-  private List<GateAnnotationBuilder> outputsAdded;
+  private transient List<GateAnnotationBuilder> outputsAdded;
 
   /**
    * A list of ObjectBuilders defining the annotations whose features have been
    * updated by UIMA, and for which changes should be propagated back into
    * GATE.
    */
-  private List<GateAnnotationBuilder> outputsUpdated;
+  private transient List<GateAnnotationBuilder> outputsUpdated;
 
   /**
    * A list of ObjectBuilders giving the annotations that have been removed by
    * UIMA and for which the corresponding annotations should be removed in
    * GATE.
    */
-  private List<GateAnnotationBuilder> outputsRemoved;
+  private transient List<GateAnnotationBuilder> outputsRemoved;
 
 
   ////// variables for the GATE/UIMA index //////
@@ -197,31 +197,31 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
    * Feature Structure Type for the AnnotationSource FS type used for the
    * GATE/UIMA index.
    */
-  private Type annotationSourceType;
+  private transient Type annotationSourceType;
 
   private static final String ANNOTATIONSOURCE_TYPE_NAME =
     "gate.uima.mapping.AnnotationSource";
 
-  private Feature annotationSource_UIMAAnnotationFeature;
+  private transient Feature annotationSource_UIMAAnnotationFeature;
 
   private static final String ANNOTATIONSOURCE_UIMAANNOTATION_FEATURE_NAME =
     ANNOTATIONSOURCE_TYPE_NAME + ":UIMAAnnotation";
 
-  private Feature annotationSource_GATEAnnotationIDFeature;
+  private transient Feature annotationSource_GATEAnnotationIDFeature;
 
   private static final String ANNOTATIONSOURCE_GATEANNOTATIONID_FEATURE_NAME =
     ANNOTATIONSOURCE_TYPE_NAME + ":GATEAnnotationID";
 
-  private Feature annotationSource_GATEAnnotationTypeFeature;
+  private transient Feature annotationSource_GATEAnnotationTypeFeature;
 
   private static final String ANNOTATIONSOURCE_GATEANNOTATIONTYPE_FEATURE_NAME =
     ANNOTATIONSOURCE_TYPE_NAME + ":GATEAnnotationType";
 
-  private FSIndex<FeatureStructure> gateFSIndex;
+  private transient FSIndex<FeatureStructure> gateFSIndex;
 
   private static final String GATE_INDEX_LABEL = "GATEIndex";
 
-  private FeaturePath gateAnnotationTypePath;
+  private transient FeaturePath gateAnnotationTypePath;
 
   /**
    * Initialise this resource.  This method creates the underlying UIMA objects
@@ -265,7 +265,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
 
       // load our GATE-specific type system and index information
       XMLInputSource gateIndexSource = new XMLInputSource(
-          this.getClass().getResourceAsStream("gateIndexTypeDefinition.xml"),
+          AnalysisEnginePR.class.getResourceAsStream("gateIndexTypeDefinition.xml"),
           new File(""));
       ResourceMetaData gateIndexDescription =
         uimaXMLParser.parseResourceMetaData(gateIndexSource);
@@ -762,7 +762,7 @@ public class AnalysisEnginePR extends AbstractLanguageAnalyser {
                                FeatureStructure indexEntry, AnnotationSet as) {
     int gateID =
       indexEntry.getIntValue(annotationSource_GATEAnnotationIDFeature);
-    return as.get(new Integer(gateID));
+    return as.get(Integer.valueOf(gateID));
   }
   
   //////// processing the mapping descriptor ////////

@@ -36,9 +36,8 @@ public class ObjectManager {
     Map<String, Class<? extends ObjectBuilder>> elementNameMap = new HashMap<>();
 
     Properties builderClasses = new Properties();
-    InputStream propsStream =
-        ObjectManager.class.getResourceAsStream("objectbuilders.properties");
-    try {
+    try(InputStream propsStream =
+        ObjectManager.class.getResourceAsStream("objectbuilders.properties")) {
       builderClasses.load(propsStream);
     }
     catch(IOException ioe) {

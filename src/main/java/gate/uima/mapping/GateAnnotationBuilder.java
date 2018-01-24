@@ -176,7 +176,7 @@ public class GateAnnotationBuilder implements ObjectBuilder {
 
     // add returns the Integer ID
     try {
-      return annSet.add(new Long(annotStart), new Long(annotEnd),
+      return annSet.add(Long.valueOf(annotStart), Long.valueOf(annotEnd),
           annotationType, annotFeatures);
     }
     catch(InvalidOffsetException ioe) {

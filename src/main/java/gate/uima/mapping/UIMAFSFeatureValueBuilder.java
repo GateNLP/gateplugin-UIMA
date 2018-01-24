@@ -82,11 +82,11 @@ public class UIMAFSFeatureValueBuilder implements ObjectBuilder {
           break;
 
         case FeatureDefinition.INT_KIND:
-          returnValue = new Integer(currentFS.getIntValue(feature));
+          returnValue = Integer.valueOf(currentFS.getIntValue(feature));
           break;
 
         case FeatureDefinition.FLOAT_KIND:
-          returnValue = new Float(currentFS.getFloatValue(feature));
+          returnValue = Float.valueOf(currentFS.getFloatValue(feature));
           break;
 
         case FeatureDefinition.FS_KIND:
