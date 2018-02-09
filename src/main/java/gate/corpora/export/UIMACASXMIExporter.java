@@ -251,7 +251,7 @@ public class UIMACASXMIExporter extends DocumentExporter {
     Gate.getCreoleRegister()
         .registerPlugin(new Plugin.Component(UIMACASXMIExporter.class));
 
-    Gate.getCreoleRegister().registerPlugin(new Plugin.Maven("uk.ac.gate.plugins", "annie", "8.5-SNAPSHOT"));
+    Gate.getCreoleRegister().registerPlugin(new Plugin.Maven("uk.ac.gate.plugins", "annie", "8.5-alpha1"));
     
     Document doc = Factory.newDocument("Hello World");
     
